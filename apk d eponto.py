@@ -3,100 +3,107 @@ from tkinter import messagebox
 from datetime import datetime, timedelta
 import pandas as pd
 import os
-from fpdf import FPDF
 
 # Nome do arquivo Excel
-EXCEL_FILE = "registros.xlsx"
+def get_excel_filename():
+    mes_atual = datetime.now().strftime("%B").capitalize()
+    ano_atual = datetime.now().strftime("%Y")
+    return f"{mes_atual}_{ano_atual}_horarios_gustavo.xlsx"
+
+EXCEL_FILE = get_excel_filename()
 
 # Criar o Excel inicial se não existir
-if not os.path.exists(EXCEL_FILE):
-    colunas = ["Dia", "Chegada", "Almoco", "Saida", "Horas Totais", "OBS"]
-    dias = list(range(1, 32))
-    df = pd.DataFrame({"Dia": dias, "Chegada": ["" for _ in dias], "Almoco": ["" for _ in dias],
-                       "Saida": ["" for _ in dias], "Horas Totais": ["" for _ in dias], "OBS": ["" for _ in dias]})
-    df.to_excel(EXCEL_FILE, index=False)
+def criar_planilha_se_nao_existir():
+    if not os.path.exists(EXCEL_FILE):
+        colunas = ["Dia", "Chegada", "Almoco", "Saida", "Horas Totais", "OBS"]
+        
+        # Determinar o número de dias no mês atual
+        hoje = datetime.now()
+        primeiro_dia = hoje.replace(day=1)
+        ultimo_dia = (primeiro_dia + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        dias_no_mes = ultimo_dia.day
+        
+        # Preencher os dias do mês
+        dias = list(range(1, dias_no_mes + 1))
+        df = pd.DataFrame({
+            "Dia": dias,
+            "Chegada": ["" for _ in dias],
+            "Almoco": ["" for _ in dias],
+            "Saida": ["" for _ in dias],
+            "Horas Totais": ["" for _ in dias],
+            "OBS": ["" for _ in dias]
+        })
+        
+        # Salvar o DataFrame no arquivo Excel
+        df.to_excel(EXCEL_FILE, index=False)
 
 def registrar_horario(tipo):
     try:
-        dia_selecionado = int(entry_dia.get())
+        # Obter o dia atual
+        dia_atual = datetime.now().day
         horario_atual = datetime.now().strftime("%H:%M")
-
-        # Verificar se o dia é válido
-        if dia_selecionado < 1 or dia_selecionado > 31:
-            messagebox.showerror("Erro", "Dia inválido. Por favor, insira um valor entre 1 e 31.")
-            return
 
         # Carregar o Excel existente
         df = pd.read_excel(EXCEL_FILE)
 
+        # Converter a coluna "Dia" para o tipo inteiro (caso necessário)
+        df["Dia"] = df["Dia"].astype(int)
+
+        # Garantir que as colunas sejam do tipo string
+        for coluna in ["Chegada", "Almoco", "Saida", "Horas Totais", "OBS"]:
+            if coluna in df.columns:
+                df[coluna] = df[coluna].fillna("")  # Substituir NaN por vazio
+
+        # Verificar se o dia atual existe no DataFrame
+        if dia_atual not in df["Dia"].values:
+            raise ValueError(f"O dia {dia_atual} não foi encontrado na planilha.")
+
         # Atualizar o horário correspondente
         if tipo == "Chegada":
-            df.loc[df["Dia"] == dia_selecionado, "Chegada"] = horario_atual
+            df.loc[df["Dia"] == dia_atual, "Chegada"] = horario_atual
         elif tipo == "Almoco":
-            df.loc[df["Dia"] == dia_selecionado, "Almoco"] = horario_atual
+            df.loc[df["Dia"] == dia_atual, "Almoco"] = horario_atual
         elif tipo == "Saida":
-            df.loc[df["Dia"] == dia_selecionado, "Saida"] = horario_atual
+            df.loc[df["Dia"] == dia_atual, "Saida"] = horario_atual
 
-        # Calcular horas totais se todos os horários forem válidos
-        chegada = df.loc[df["Dia"] == dia_selecionado, "Chegada"].values[0]
-        almoco = df.loc[df["Dia"] == dia_selecionado, "Almoco"].values[0]
-        saida = df.loc[df["Dia"] == dia_selecionado, "Saida"].values[0]
+        # Calcular horas totais se "Chegada" e "Saída" estiverem preenchidas
+        chegada = df.loc[df["Dia"] == dia_atual, "Chegada"].values[0]
+        saida = df.loc[df["Dia"] == dia_atual, "Saida"].values[0]
 
-        if pd.notna(chegada) and pd.notna(almoco) and pd.notna(saida):
+        if chegada and saida:
             try:
                 h_chegada = datetime.strptime(chegada, "%H:%M")
-                h_almoco = datetime.strptime(almoco, "%H:%M")
                 h_saida = datetime.strptime(saida, "%H:%M")
-                horas_trabalhadas = (h_almoco - h_chegada) + (h_saida - h_almoco)
-                horas_totais = str(horas_trabalhadas)
-                df.loc[df["Dia"] == dia_selecionado, "Horas Totais"] = horas_totais
+                horas_trabalhadas = h_saida - h_chegada
+                horas_totais = f"{horas_trabalhadas.seconds // 3600}:{(horas_trabalhadas.seconds // 60) % 60}"
+                df.loc[df["Dia"] == dia_atual, "Horas Totais"] = horas_totais
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao calcular horas totais: {e}")
+        else:
+            df.loc[df["Dia"] == dia_atual, "Horas Totais"] = ""
 
         # Salvar de volta no Excel
         df.to_excel(EXCEL_FILE, index=False)
 
-        messagebox.showinfo("Sucesso", f"{tipo} registrada com sucesso para o dia {dia_selecionado}!")
-    except ValueError:
-        messagebox.showerror("Erro", "Por favor, insira um dia válido.")
+        messagebox.showinfo("Sucesso", f"{tipo} registrada com sucesso para o dia {dia_atual}!")
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao registrar horário: {e}")
 
 def criar_interface():
-    global entry_dia
+    criar_planilha_se_nao_existir()
 
     janela = tk.Tk()
     janela.title("Ponto Virtual - Registro de Horários")
 
-    # Tabela visual com dias
-    tabela_frame = tk.Frame(janela)
-    tabela_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=10)
-
-    # Cabeçalho
-    headers = ["Dia", "Chegada", "Almoco", "Saida", "Horas Totais", "OBS"]
-    for col, header in enumerate(headers):
-        tk.Label(tabela_frame, text=header, borderwidth=1, relief="solid", width=15).grid(row=0, column=col)
-
-    # Dias do mês
-    for dia in range(1, 32):
-        tk.Label(tabela_frame, text=str(dia), borderwidth=1, relief="solid", width=15).grid(row=dia, column=0)
-
-    # Inputs para registro
-    tk.Label(janela, text="Dia:").grid(row=1, column=0, padx=5, pady=5)
-    entry_dia = tk.Entry(janela)
-    entry_dia.grid(row=1, column=1, padx=5, pady=5)
-
     # Botões para registrar horários
     botao_chegada = tk.Button(janela, text="Registrar Chegada", command=lambda: registrar_horario("Chegada"), width=20)
-    botao_chegada.grid(row=2, column=0, columnspan=2, pady=5)
+    botao_chegada.pack(pady=10)
 
     botao_almoco = tk.Button(janela, text="Registrar Almoço", command=lambda: registrar_horario("Almoco"), width=20)
-    botao_almoco.grid(row=3, column=0, columnspan=2, pady=5)
+    botao_almoco.pack(pady=10)
 
     botao_saida = tk.Button(janela, text="Registrar Saída", command=lambda: registrar_horario("Saida"), width=20)
-    botao_saida.grid(row=4, column=0, columnspan=2, pady=5)
-
-    # Botão para gerar relatório
-  #  botao_relatorio = tk.Button(janela, text="Gerar Relatório", command=gerar_relatorio, width=20)
-   # botao_relatorio.grid(row=5, column=0, columnspan=2, pady=10)
+    botao_saida.pack(pady=10)
 
     janela.mainloop()
 
