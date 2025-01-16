@@ -1,4 +1,4 @@
-# Ponto Virtual: Um Sistema Simples de Registro de Horários
+# Ponto Virtual: Um Sistema de Registro de Horários
 
 ## Descrição
 Este projeto Python cria uma interface gráfica simples para registrar horários de chegada, almoço e saída de um funcionário. Os dados são armazenados em um arquivo Excel e podem ser visualizados diretamente na interface.
